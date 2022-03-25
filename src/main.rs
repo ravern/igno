@@ -1,12 +1,15 @@
-use std::{iter, process, string::FromUtf8Error};
+use std::{iter, path::Path, process, string::FromUtf8Error};
 
 use clap::Parser;
 use futures::future::join_all;
 use hyper::{
+  body::Body,
   client::{connect::HttpConnector, Client},
-  http::{uri::InvalidUri, StatusCode},
+  http::{header, method::Method, uri::InvalidUri, StatusCode, Uri},
+  Request,
 };
 use hyper_tls::HttpsConnector;
+use serde::Deserialize;
 use thiserror::Error;
 
 #[derive(Debug, Parser)]
@@ -29,14 +32,18 @@ enum Command {
 
 #[derive(Debug, Error)]
 enum Error {
-  #[error("{}", 0)]
+  #[error("{}", _0)]
   InvalidUri(#[from] InvalidUri),
-  #[error("{}", 0)]
+  #[error("{}", _0)]
   Utf8(#[from] FromUtf8Error),
-  #[error("{}", 0)]
+  #[error("{}", _0)]
   Hyper(#[from] hyper::Error),
+  #[error("{}", _0)]
+  HyperHttp(#[from] hyper::http::Error),
   #[error("failed to fetch gitignore for {}: {}", _0, _1)]
   Http(String, String),
+  #[error("failed to parse search data: {}", _0)]
+  Deserialize(#[from] serde_json::Error),
 }
 
 #[tokio::main]
@@ -97,10 +104,48 @@ async fn run_generate(
   Ok(())
 }
 
+#[derive(Debug, Deserialize)]
+struct SearchData {
+  tree: Vec<Object>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Object {
+  path: String,
+}
+
+fn get_gitignore_name(path: &str) -> &str {
+  &Path::new(path).file_stem().unwrap().to_str().unwrap()
+}
+
 async fn run_search(
-  _client: &Client<HttpsConnector<HttpConnector>>,
-  _query: String,
+  client: &Client<HttpsConnector<HttpConnector>>,
+  query: String,
 ) -> Result<(), Error> {
+  let uri: Uri = "https://api.github.com/repos/toptal/gitignore/git/trees/master?recursive=true".parse()?;
+
+  let req = Request::builder()
+    .method(Method::GET)
+    .uri(uri)
+    .header(header::USER_AGENT, "Ignore/0.1")
+    .body(Body::empty())?;
+
+  let resp = client.request(req).await?;
+
+  let bytes = hyper::body::to_bytes(resp.into_body()).await?;
+  let search_data: SearchData = serde_json::from_slice(&bytes)?;
+
+  search_data.tree.into_iter().for_each(|object| {
+    if object.path == ".gitignore" || !object.path.ends_with(".gitignore") {
+      return;
+    }
+
+    let name = get_gitignore_name(&object.path);
+    if name.to_uppercase().contains(&query.to_uppercase()) {
+      println!("{}", name);
+    }
+  });
+
   Ok(())
 }
 
