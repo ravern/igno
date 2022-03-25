@@ -1,9 +1,15 @@
 [package]
 name = "igno"
+description = "Generate gitignore files with ease"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "GPL-3.0"
+homepage = "https://github.com/ravern/igno"
+documentation = "https://docs.rs/igno"
+repository = "https://github.com/ravern/igno"
+readme = "README.md"
+categories = ["command-line-utilities"]
+keywords = ["gitignore", "git"]
 
 [dependencies]
 clap = { version = "3.1.6", features = ["derive"] }
