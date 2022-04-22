@@ -320,7 +320,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ignore"
+name = "igno"
 version = "0.1.0"
 dependencies = [
  "clap",
